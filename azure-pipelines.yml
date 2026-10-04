@@ -1,24 +1,85 @@
-﻿pool: Terraform-DevOps-Pool
-
-trigger:
+﻿trigger:
 - main
 - feature/*
 
+pool:
+  name: Terraform-DevOps-Pool
+  demands:
+  - Agent.Name -equals Terraform-Agent
+
 stages:
 
-  - stage: TerraformInitAndValidate
-    displayName: Init and Validate
-    jobs: 
-    - job: InitAndValidate
-      displayName: Init and Validate
-      steps:
+- stage: TerraformInitAndValidate
+  displayName: Init and Validate
 
-      - task: TerraformTask@5
-        inputs:
-          provider: 'azurerm'
-          command: 'init'
-          workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
-          backendServiceArm: 'svc-ado'
-          backendAzureRmStorageAccountName: 'storageaxion'
-          backendAzureRmContainerName: 'meradost02'
-          backendAzureRmKey: 'dev.terrafrom.tfsate'
+  jobs:
+
+  - job: InitAndValidate
+    displayName: Init and Validate
+
+    steps:
+
+    - checkout: self
+      displayName: Checkout Code
+
+    # Check Terraform
+    - powershell: |
+        Write-Host "===== TERRAFORM VERSION ====="
+
+        where.exe terraform
+
+        & "C:\ProgramData\chocolatey\bin\terraform.exe" version
+
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+
+      displayName: Check Terraform
+
+
+    # Terraform Init
+    - powershell: |
+        $terraformPath = "C:\ProgramData\chocolatey\bin\terraform.exe"
+        $workingDirectory = "$(System.DefaultWorkingDirectory)\terraform\environments\dev"
+
+        Write-Host "===== TERRAFORM INIT ====="
+        Write-Host "Working Directory:"
+        Write-Host $workingDirectory
+
+        if (-not (Test-Path $workingDirectory)) {
+            Write-Error "Terraform directory not found: $workingDirectory"
+            exit 1
+        }
+
+        Set-Location $workingDirectory
+
+        & $terraformPath init `
+          "-backend-config=storage_account_name=storageaxion" `
+          "-backend-config=container_name=meradost02" `
+          "-backend-config=key=dev.terrafrom.tfsate"
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Terraform init failed"
+            exit $LASTEXITCODE
+        }
+
+      displayName: Terraform Init
+
+
+    # Terraform Validate
+    - powershell: |
+        $terraformPath = "C:\ProgramData\chocolatey\bin\terraform.exe"
+        $workingDirectory = "$(System.DefaultWorkingDirectory)\terraform\environments\dev"
+
+        Write-Host "===== TERRAFORM VALIDATE ====="
+
+        Set-Location $workingDirectory
+
+        & $terraformPath validate
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Terraform validate failed"
+            exit $LASTEXITCODE
+        }
+
+      displayName: Terraform Validate
