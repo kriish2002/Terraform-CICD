@@ -1,118 +1,24 @@
-﻿trigger:
-  branches:
-    include:
-      - main
-      - dev
-  paths:
-    include:
-      - terraform/**
+﻿pool: Terraform-DevOps-Pool
 
-pool:
-  vmImage: 'ubuntu-latest'
-
-variables:
-  # Service Connection configured in Azure DevOps Project Settings -> Service Connections
-  azureServiceConnection: 'Azure-DevOps-ServiceConnection'
-  workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/environments/dev'
-  
-  # Azure Storage for Remote State (Optional: update according to your environment)
-  backendResourceGroupName: 'rg-terraform-tfstate'
-  backendStorageAccountName: 'sttfstatecicd001'
-  backendContainerName: 'tfstate'
-  backendKey: 'dev.terraform.tfstate'
+trigger:
+- main
+- feature/*
 
 stages:
-  # -----------------------------------------------------------
-  # STAGE 1: Validate (Format & Syntax Check)
-  # -----------------------------------------------------------
-  - stage: Validate
-    displayName: 'Terraform Validate'
-    jobs:
-      - job: ValidateJob
-        displayName: 'Format & Validate'
-        steps:
-          - task: HashiCorp.terraform-installer.CustomTerraformInstaller@0
-            displayName: 'Install Terraform'
-            inputs:
-              terraformVersion: 'latest'
 
-          - script: |
-              terraform fmt -check
-            workingDirectory: $(workingDirectory)
-            displayName: 'Terraform Format Check'
+  - stage: TerraformInitAndValidate
+    displayName: Init and Validate
+    jobs: 
+    - job: InitAndValidate
+      displayName: Init and Validate
+      steps:
 
-          - script: |
-              terraform init -backend=false
-              terraform validate
-            workingDirectory: $(workingDirectory)
-            displayName: 'Terraform Init & Validate'
-
-  # -----------------------------------------------------------
-  # STAGE 2: Plan (Dry Run)
-  # -----------------------------------------------------------
-  - stage: Plan
-    displayName: 'Terraform Plan'
-    dependsOn: Validate
-    condition: succeeded()
-    jobs:
-      - job: PlanJob
-        displayName: 'Terraform Plan'
-        steps:
-          - task: HashiCorp.terraform-installer.CustomTerraformInstaller@0
-            displayName: 'Install Terraform'
-            inputs:
-              terraformVersion: 'latest'
-
-          - task: AzureCLI@2
-            displayName: 'Terraform Init & Plan'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              workingDirectory: $(workingDirectory)
-              inlineScript: |
-                terraform init \
-                  -backend-config="resource_group_name=$(backendResourceGroupName)" \
-                  -backend-config="storage_account_name=$(backendStorageAccountName)" \
-                  -backend-config="container_name=$(backendContainerName)" \
-                  -backend-config="key=$(backendKey)"
-                
-                terraform plan -var-file="terraform.tfvars" -out="tfplan"
-
-  # -----------------------------------------------------------
-  # STAGE 3: Apply (Deploy to Azure)
-  # -----------------------------------------------------------
-  - stage: Apply
-    displayName: 'Terraform Apply'
-    dependsOn: Plan
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    jobs:
-      - deployment: ApplyJob
-        displayName: 'Terraform Apply'
-        environment: 'dev'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-
-                - task: HashiCorp.terraform-installer.CustomTerraformInstaller@0
-                  displayName: 'Install Terraform'
-                  inputs:
-                    terraformVersion: 'latest'
-
-                - task: AzureCLI@2
-                  displayName: 'Terraform Init & Apply'
-                  inputs:
-                    azureSubscription: $(azureServiceConnection)
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    workingDirectory: $(workingDirectory)
-                    inlineScript: |
-                      terraform init \
-                        -backend-config="resource_group_name=$(backendResourceGroupName)" \
-                        -backend-config="storage_account_name=$(backendStorageAccountName)" \
-                        -backend-config="container_name=$(backendContainerName)" \
-                        -backend-config="key=$(backendKey)"
-                      
-                      terraform apply -auto-approve -var-file="terraform.tfvars"
+      - task: TerraformTask@5
+        inputs:
+          provider: 'azurerm'
+          command: 'init'
+          workingDirectory: '$(System.DefaultWorkingDirectory)/environment/dev'
+          backendServiceArm: 'svc-ado'
+          backendAzureRmStorageAccountName: 'storageaxion'
+          backendAzureRmContainerName: 'meradost02'
+          backendAzureRmKey: 'dev.terrafrom.tfsate'
