@@ -1,0 +1,356 @@
+pool:
+  name: Terraform-DevOps-Pool
+
+trigger:
+  branches:
+    include:
+      - master
+      - main
+      - feature/*
+
+stages:
+
+# ============================================================
+# STAGE 1 - TERRAFORM INIT & VALIDATE
+# ============================================================
+
+- stage: TerraformInitAndValidate
+  displayName: "Terraform Init and Validate"
+
+  jobs:
+
+  - job: InitAndValidate
+    displayName: "Init and Validate"
+
+    steps:
+
+    # --------------------------------------------------------
+    # Install Terraform
+    # --------------------------------------------------------
+
+    - task: TerraformInstaller@1
+      displayName: "Install Terraform"
+      inputs:
+        terraformVersion: "1.9.8"
+
+    # --------------------------------------------------------
+    # Verify Terraform
+    # --------------------------------------------------------
+
+    - powershell: |
+        terraform --version
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform installation failed"
+          exit 1
+        }
+
+        Write-Host "Terraform installed successfully"
+      displayName: "Verify Terraform"
+
+    # --------------------------------------------------------
+    # Terraform Init
+    # --------------------------------------------------------
+
+    - task: TerraformTask@5
+      displayName: "Terraform Init"
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: "$(Build.SourcesDirectory)/terraform/environments/dev"
+        backendServiceArm: svc-ado
+        backendAzureRmResourceGroupName: YOUR-RG
+        backendAzureRmStorageAccountName: checkstorage132423
+        backendAzureRmContainerName: containerstorage
+        backendAzureRmKey: dev.terraform.tfstate
+
+    # --------------------------------------------------------
+    # Terraform Format Check
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)\terraform\environments\dev"
+
+        terraform fmt -check -recursive
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform formatting check failed"
+          exit 1
+        }
+
+        Write-Host "Terraform formatting check passed"
+
+      displayName: "Terraform Format Check"
+
+    # --------------------------------------------------------
+    # Terraform Validate
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)\terraform\environments\dev"
+
+        terraform validate
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform validation failed"
+          exit 1
+        }
+
+        Write-Host "Terraform validation passed"
+
+      displayName: "Terraform Validate"
+
+
+# ============================================================
+# STAGE 2 - TERRAFORM SECURITY SCAN
+# ============================================================
+
+- stage: SecurityScan
+  displayName: "Terraform Security Scan"
+
+  dependsOn:
+    - TerraformInitAndValidate
+
+  condition: succeeded()
+
+  jobs:
+
+  - job: SecurityScan
+    displayName: "TFSec TFLint Checkov"
+
+    steps:
+
+    # ========================================================
+    # TFSEC
+    # ========================================================
+
+    # --------------------------------------------------------
+    # Download TFSec
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        $tfsecDir = "$(Agent.TempDirectory)\tfsec"
+
+        New-Item `
+          -ItemType Directory `
+          -Force `
+          -Path $tfsecDir | Out-Null
+
+        Write-Host "Downloading TFSec..."
+
+        $url = "https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-windows-amd64.exe"
+
+        Invoke-WebRequest `
+          -Uri $url `
+          -OutFile "$tfsecDir\tfsec.exe"
+
+        if (-not (Test-Path "$tfsecDir\tfsec.exe")) {
+          Write-Error "TFSec download failed"
+          exit 1
+        }
+
+        Write-Host "TFSec downloaded successfully"
+
+      displayName: "Install TFSec"
+
+    # --------------------------------------------------------
+    # Verify TFSec
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        & "$(Agent.TempDirectory)\tfsec\tfsec.exe" --version
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "TFSec verification failed"
+          exit 1
+        }
+
+      displayName: "Verify TFSec"
+
+    # --------------------------------------------------------
+    # Run TFSec
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)"
+
+        & "$(Agent.TempDirectory)\tfsec\tfsec.exe" terraform/
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "TFSec security scan failed"
+          exit 1
+        }
+
+        Write-Host "TFSec security scan passed"
+
+      displayName: "Run TFSec"
+
+
+    # ========================================================
+    # TFLINT
+    # ========================================================
+
+    # --------------------------------------------------------
+    # Download TFLint
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        $tflintDir = "$(Agent.TempDirectory)\tflint"
+
+        New-Item `
+          -ItemType Directory `
+          -Force `
+          -Path $tflintDir | Out-Null
+
+        Write-Host "Downloading TFLint..."
+
+        $url = "https://github.com/terraform-linters/tflint/releases/latest/download/tflint_windows_amd64.zip"
+
+        $zip = "$tflintDir\tflint.zip"
+
+        Invoke-WebRequest `
+          -Uri $url `
+          -OutFile $zip
+
+        if (-not (Test-Path $zip)) {
+          Write-Error "TFLint download failed"
+          exit 1
+        }
+
+        Expand-Archive `
+          -Path $zip `
+          -DestinationPath $tflintDir `
+          -Force
+
+        if (-not (Test-Path "$tflintDir\tflint.exe")) {
+          Write-Error "TFLint executable not found"
+          exit 1
+        }
+
+        Write-Host "TFLint downloaded successfully"
+
+      displayName: "Install TFLint"
+
+    # --------------------------------------------------------
+    # Verify TFLint
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        & "$(Agent.TempDirectory)\tflint\tflint.exe" --version
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "TFLint verification failed"
+          exit 1
+        }
+
+      displayName: "Verify TFLint"
+
+    # --------------------------------------------------------
+    # Initialize TFLint
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)\terraform\environments\dev"
+
+        & "$(Agent.TempDirectory)\tflint\tflint.exe" --init
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "TFLint initialization failed"
+          exit 1
+        }
+
+        Write-Host "TFLint initialized successfully"
+
+      displayName: "Initialize TFLint"
+
+    # --------------------------------------------------------
+    # Run TFLint
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)\terraform\environments\dev"
+
+        & "$(Agent.TempDirectory)\tflint\tflint.exe"
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "TFLint validation failed"
+          exit 1
+        }
+
+        Write-Host "TFLint validation passed"
+
+      displayName: "Run TFLint"
+
+
+    # ========================================================
+    # CHECKOV
+    # ========================================================
+
+    # --------------------------------------------------------
+    # Install Checkov
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        python --version
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Python is not available on the agent"
+          exit 1
+        }
+
+        python -m pip install --upgrade pip
+
+        python -m pip install checkov
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Checkov installation failed"
+          exit 1
+        }
+
+        Write-Host "Checkov installed successfully"
+
+      displayName: "Install Checkov"
+
+    # --------------------------------------------------------
+    # Verify Checkov
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        checkov --version
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Checkov verification failed"
+          exit 1
+        }
+
+      displayName: "Verify Checkov"
+
+    # --------------------------------------------------------
+    # Run Checkov
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)"
+
+        checkov -d terraform/
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Checkov security scan failed"
+          exit 1
+        }
+
+        Write-Host "Checkov security scan passed"
+
+      displayName: "Run Checkov"
