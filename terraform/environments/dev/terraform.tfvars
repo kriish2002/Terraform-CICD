@@ -1,4 +1,4 @@
-﻿environment = "dev"
+environment = "dev"
 
 resource_groups = {
   "rg-dev" = {

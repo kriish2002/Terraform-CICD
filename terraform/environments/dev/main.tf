@@ -1,4 +1,4 @@
-﻿# 1. Resource Group Module with for_each
+# 1. Resource Group Module with for_each
 module "resource_group" {
   source = "../../modules/resource-group"
 

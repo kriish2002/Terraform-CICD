@@ -1,4 +1,4 @@
-﻿output "resource_groups" {
+output "resource_groups" {
   description = "Created Resource Groups"
   value       = module.resource_group.resource_groups
 }
