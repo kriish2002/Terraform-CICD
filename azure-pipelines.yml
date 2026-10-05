@@ -59,7 +59,7 @@ stages:
         command: init
         workingDirectory: "$(Build.SourcesDirectory)/terraform/environments/dev"
         backendServiceArm: svc-ado
-        backendAzureRmResourceGroupName: YOUR-RG
+        backendAzureRmResourceGroupName: ado-storage
         backendAzureRmStorageAccountName: checkstorage132423
         backendAzureRmContainerName: containerstorage
         backendAzureRmKey: dev.terraform.tfstate
