@@ -41,3 +41,35 @@ stages:
         backendAzureRmKey: dev.terraform.tfstate
 
 
+    # --------------------------------------------------------
+    # Terraform Format Check
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)\terraform\environments\dev"
+
+        terraform fmt -check -recursive
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform formatting check failed"
+          exit 1
+        }
+
+      displayName: Terraform Format Check
+        # --------------------------------------------------------
+    # Terraform Validate
+    # --------------------------------------------------------
+
+    - powershell: |
+
+        cd "$(Build.SourcesDirectory)\terraform\environments\dev"
+
+        terraform validate
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform validation failed"
+          exit 1
+        }
+
+      displayName: Terraform Validate  
