@@ -1,12 +1,11 @@
-environment = "dev"
 
 resource_groups = {
   "rg-dev" = {
     name     = "rg-dev-eastus-01"
     location = "East US"
     tags = {
-      Environment = "dev"
-      ManagedBy   = "Terraform"
+
+      ManagedBy = "Terraform"
     }
   }
 }

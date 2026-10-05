@@ -1,11 +1,6 @@
-variable "environment" {
-  type        = string
-  default     = "dev"
-  description = "Environment name"
-}
-
 variable "resource_groups" {
-  description = "Map of Resource Groups to create"
+  description = "Map of Resource Groups"
+
   type = map(object({
     name     = string
     location = string
@@ -15,6 +10,7 @@ variable "resource_groups" {
 
 variable "vnets" {
   description = "Map of Virtual Networks"
+
   type = map(object({
     name                = string
     location            = string
@@ -26,11 +22,13 @@ variable "vnets" {
 
 variable "subnets" {
   description = "Map of Subnets"
+
   type = map(object({
     name                = string
     resource_group_name = string
     vnet_key            = string
     address_prefixes    = list(string)
   }))
+
   default = {}
 }
