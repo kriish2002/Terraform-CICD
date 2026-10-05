@@ -1,8 +1,19 @@
+# Compiled files and directories
+**/.terraform/*
+**/.terraform/
 .terraform/
+
+# State files
 *.tfstate
 *.tfstate.*
-crash.log
-crash.*.log
 *.tfplan
 *.tfplan.json
 .terraform.tfstate.lock.info
+
+# Crash logs
+crash.log
+crash.*.log
+
+# CLI configuration files
+.terraformrc
+terraform.rc
