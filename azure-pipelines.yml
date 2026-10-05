@@ -41,9 +41,3 @@ stages:
         backendAzureRmKey: dev.terraform.tfstate
 
 
-    - task: TerraformTask@5
-      inputs:
-        provider: 'azurerm'
-        command: 'plan'
-        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/environments/dev'
-        environmentServiceNameAzureRM: 'svc-ado'
