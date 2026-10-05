@@ -5,7 +5,6 @@
   location            = each.value.location
   resource_group_name = each.value.resource_group_name
   address_space       = each.value.address_space
-  tags                = lookup(each.value, "tags", {})
 }
 
 resource "azurerm_subnet" "subnet" {
