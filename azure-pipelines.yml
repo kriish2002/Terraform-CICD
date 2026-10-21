@@ -18,10 +18,11 @@ trigger:
   - main
   - feature/*
 
-# Reusable variables taaki duplicate values bar-bar na likhni padein:
+# Reusable variables (Aapki actual Azure details):
 variables:
   workingDirectory: "$(System.DefaultWorkingDirectory)/terraform/environments/dev"
   serviceConnection: "krish-svc"
+  subscriptionId: "ef91bdd8-1032-48b8-9e99-c38172c04bb6"
   backendResourceGroup: "krish-test"
   backendStorageAccount: "krishtfstate42129"
   backendContainer: "tfstate"
@@ -31,10 +32,6 @@ stages:
 
   # ============================================================================
   # STAGE 1: INIT AND VALIDATE
-  # ============================================================================
-  # Is stage me:
-  # - Terraform backend aur Azure provider download/init hote hain
-  # - Code syntax validate hota hai taaki koi typo ya error na ho
   # ============================================================================
   - stage: TerraformInitAndValidate
     displayName: "Init and Validate"
@@ -50,6 +47,7 @@ stages:
               command: "init"
               workingDirectory: "$(workingDirectory)"
               backendServiceArm: "$(serviceConnection)"
+              backendAzureRmOverrideSubscriptionID: "$(subscriptionId)"
               backendAzureRmResourceGroupName: "$(backendResourceGroup)"
               backendAzureRmStorageAccountName: "$(backendStorageAccount)"
               backendAzureRmContainerName: "$(backendContainer)"
@@ -67,10 +65,6 @@ stages:
   # ============================================================================
   # STAGE 2: TERRAFORM PLAN
   # ============================================================================
-  # Is stage me:
-  # - Remote backend se state connect hoti hai
-  # - Azure subscription scan hoke execution plan generate hota hai
-  # ============================================================================
   - stage: TerraformPlan
     displayName: "Plan"
     condition: succeeded()
@@ -80,7 +74,7 @@ stages:
       - job: TerraformPlan
         displayName: "Plan"
         steps:
-          # Step 1: Terraform Init (Har naye job me init zaroori hota hai)
+          # Step 1: Terraform Init
           - task: TerraformTask@5
             displayName: "Terraform Init"
             inputs:
@@ -88,12 +82,13 @@ stages:
               command: "init"
               workingDirectory: "$(workingDirectory)"
               backendServiceArm: "$(serviceConnection)"
+              backendAzureRmOverrideSubscriptionID: "$(subscriptionId)"
               backendAzureRmResourceGroupName: "$(backendResourceGroup)"
               backendAzureRmStorageAccountName: "$(backendStorageAccount)"
               backendAzureRmContainerName: "$(backendContainer)"
               backendAzureRmKey: "$(backendKey)"
 
-          # Step 2: Terraform Plan (Changes preview karta hai)
+          # Step 2: Terraform Plan
           - task: TerraformTask@5
             displayName: "Terraform Plan"
             inputs:
@@ -106,13 +101,9 @@ stages:
   # ============================================================================
   # STAGE 3: MANUAL APPROVAL GATE
   # ============================================================================
-  # Is stage me:
-  # - Pipeline pause ho jayegi aur user approval ka wait karegi
-  # - Agent ki zaroorat nahi hoti isliye 'pool: server' use hota hai
-  # ============================================================================
   - stage: ManualApproval
     displayName: "Manual Approval Before Apply"
-    condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/master', 'refs/heads/main'))
+    condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/master', 'refs/heads/main', 'refs/heads/feature/pipeline'))
     dependsOn: TerraformPlan
 
     jobs:
@@ -132,12 +123,9 @@ stages:
   # ============================================================================
   # STAGE 4: TERRAFORM APPLY
   # ============================================================================
-  # Is stage me:
-  # - Manual Approval milne ke baad resources Azure cloud par deploy ho jayenge
-  # ============================================================================
   - stage: TerraformApply
     displayName: "Apply"
-    condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/master', 'refs/heads/main'))
+    condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/master', 'refs/heads/main', 'refs/heads/feature/pipeline'))
     dependsOn: ManualApproval
 
     jobs: 
@@ -152,12 +140,13 @@ stages:
               command: "init"
               workingDirectory: "$(workingDirectory)"
               backendServiceArm: "$(serviceConnection)"
+              backendAzureRmOverrideSubscriptionID: "$(subscriptionId)"
               backendAzureRmResourceGroupName: "$(backendResourceGroup)"
               backendAzureRmStorageAccountName: "$(backendStorageAccount)"
               backendAzureRmContainerName: "$(backendContainer)"
               backendAzureRmKey: "$(backendKey)"
 
-          # Step 2: Terraform Apply (Auto-approve ke saath cloud par banayega)
+          # Step 2: Terraform Apply
           - task: TerraformTask@5
             displayName: "Terraform Apply"
             inputs:
