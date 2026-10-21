@@ -20,6 +20,7 @@ trigger:
 
 # Reusable variables (Aapki actual Azure details):
 variables:
+  ARM_USE_OIDC: "true"
   workingDirectory: "$(System.DefaultWorkingDirectory)/terraform/environments/dev"
   serviceConnection: "krish-svc"
   subscriptionId: "ef91bdd8-1032-48b8-9e99-c38172c04bb6"
@@ -96,6 +97,7 @@ stages:
               command: "plan"
               workingDirectory: "$(workingDirectory)"
               environmentServiceNameAzureRM: "$(serviceConnection)"
+              environmentAzureRmOverrideSubscriptionID: "$(subscriptionId)"
 
 
   # ============================================================================
@@ -154,4 +156,5 @@ stages:
               command: "apply"
               workingDirectory: "$(workingDirectory)"
               environmentServiceNameAzureRM: "$(serviceConnection)"
+              environmentAzureRmOverrideSubscriptionID: "$(subscriptionId)"
               commandOptions: "-auto-approve"
