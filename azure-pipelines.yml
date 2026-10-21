@@ -1,0 +1,307 @@
+# ==============================================================================
+#                 GENERIC TERRAFORM CI/CD PIPELINE (AZURE DEVOPS)
+# ==============================================================================
+# Description:
+# Yeh ek generic aur production-ready Terraform CI/CD pipeline hai.
+# Isme parameter diya gaya hai jisse aap Dev ya Prod select kar sakte hain.
+# Default me yeh Dev environment ke liye chalegi.
+#
+# Pipeline Architecture Stages:
+# 1. Validate & Format  -> Code syntax, format, aur TFLint checks
+# 2. Security Scan      -> TFSec aur Checkov se security compliance
+# 3. Terraform Plan     -> Azure backend se connect hoke execution plan generate karna
+# 4. Terraform Apply    -> Approved plan ko Azure cloud par deploy karna
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. PARAMETERS (Pipeline ko generic banane ke liye)
+# ------------------------------------------------------------------------------
+# Azure DevOps UI se manual run karte time aap dropdown se choose kar sakte hain:
+parameters:
+  - name: environment
+    displayName: "Select Target Environment"
+    type: string
+    default: "dev"
+    values:
+      - "dev"
+      - "prod"
+
+  - name: terraformAction
+    displayName: "Terraform Action"
+    type: string
+    default: "plan-and-apply"
+    values:
+      - "plan-and-apply"
+      - "plan-only"
+
+# ------------------------------------------------------------------------------
+# 2. TRIGGER CONFIGURATION
+# ------------------------------------------------------------------------------
+# Jab bhi master branch par commit ya merge hoga, yeh pipeline trigger hogi:
+trigger:
+  branches:
+    include:
+      - master
+      - main
+
+# Pull Request aane par bhi automatic validation chalegi (bina apply kiye):
+pr:
+  branches:
+    include:
+      - master
+      - main
+
+# ------------------------------------------------------------------------------
+# 3. AGENT POOL CONFIGURATION
+# ------------------------------------------------------------------------------
+# Aapka self-hosted Windows agent pool jisme Terraform aur Azure CLI installed hain:
+pool:
+  name: "Terraform-DevOps-Pool"
+
+# ------------------------------------------------------------------------------
+# 4. DYNAMIC VARIABLES
+# ------------------------------------------------------------------------------
+# Selected environment (dev/prod) ke hisaab se paths aur state keys dynamically set hongi:
+variables:
+  - name: terraformDir
+    value: "$(System.DefaultWorkingDirectory)/terraform/environments/${{ parameters.environment }}"
+  - name: serviceConnection
+    value: "svc-ado"
+  - name: backendResourceGroup
+    value: "krish-test"
+  - name: backendStorageAccount
+    value: "krishtfstate42129"
+  - name: backendContainer
+    value: "tfstate"
+  - name: backendKey
+    value: "${{ parameters.environment }}.terraform.tfstate"
+
+# ==============================================================================
+# PIPELINE STAGES
+# ==============================================================================
+stages:
+
+  # ============================================================================
+  # STAGE 1: VALIDATION & CODE QUALITY
+  # ============================================================================
+  # Is stage me verify hota hai ki Terraform code grammatically aur syntactically
+  # sahi hai ya nahi, aur formatting standard ke mutabiq hai ya nahi.
+  # ============================================================================
+  - stage: Validate_and_Lint
+    displayName: "Stage 1: Validate & Lint (${{ parameters.environment }})"
+    jobs:
+      - job: ValidateJob
+        displayName: "Syntax & Format Check"
+        steps:
+          # Step 1.1: Terraform Version Check
+          - powershell: |
+              Write-Host "=== Step 1: Checking Terraform Version ==="
+              terraform --version
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Terraform CLI not found or failed!"
+                exit 1
+              }
+            displayName: "Verify Terraform Version"
+
+          # Step 1.2: Terraform Formatting Check
+          # Yeh check karta hai ki code me canonical formatting standard follow hua hai ya nahi.
+          - powershell: |
+              Write-Host "=== Step 2: Running Terraform Format Check ==="
+              cd "$(terraformDir)"
+              terraform fmt -check -recursive
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Terraform formatting check failed! Please run 'terraform fmt -recursive' locally."
+                exit 1
+              }
+              Write-Host "Formatting check passed successfully!"
+            displayName: "Terraform Format Check (fmt)"
+
+          # Step 1.3: Terraform Init (Validation Mode)
+          # Backend connect kiye bina local syntax checking ke liye lightweight init:
+          - powershell: |
+              Write-Host "=== Step 3: Initializing for Validation ==="
+              cd "$(terraformDir)"
+              terraform init -backend=false
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Terraform local init failed!"
+                exit 1
+              }
+            displayName: "Terraform Init (Local Backend)"
+
+          # Step 1.4: Terraform Validate
+          # Code me koi syntax error, missing variable ya invalid argument toh nahi hai:
+          - powershell: |
+              Write-Host "=== Step 4: Validating Terraform Syntax ==="
+              cd "$(terraformDir)"
+              terraform validate
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Terraform validation failed!"
+                exit 1
+              }
+              Write-Host "Terraform configuration is 100% valid!"
+            displayName: "Terraform Validate"
+
+          # Step 1.5: TFLint (Best Practices & Linter)
+          # Best practice rules aur missing provider requirements check karta hai:
+          - powershell: |
+              Write-Host "=== Step 5: Running TFLint ==="
+              if (Get-Command tflint -ErrorAction SilentlyContinue) {
+                cd "$(terraformDir)"
+                tflint --init
+                tflint
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "TFLint found issues in configuration!"
+                  exit 1
+                }
+                Write-Host "TFLint passed without any issues!"
+              } else {
+                Write-Warning "TFLint is not installed on this agent. Skipping..."
+              }
+            displayName: "TFLint Static Analysis"
+
+
+  # ============================================================================
+  # STAGE 2: SECURITY & COMPLIANCE SCANNING
+  # ============================================================================
+  # Is stage me DevSecOps tools (TFSec aur Checkov) run hote hain jo
+  # misconfigurations, insecure ports, aur security compliance ko scan karte hain.
+  # ============================================================================
+  - stage: Security_Scan
+    displayName: "Stage 2: Security & Compliance Scan"
+    dependsOn: Validate_and_Lint
+    condition: succeeded()
+    jobs:
+      - job: SecurityJob
+        displayName: "TFSec & Checkov Scans"
+        steps:
+          # Step 2.1: TFSec Security Scan
+          - powershell: |
+              Write-Host "=== Step 1: Running TFSec Security Scanner ==="
+              if (Get-Command tfsec -ErrorAction SilentlyContinue) {
+                cd "$(System.DefaultWorkingDirectory)"
+                tfsec terraform/
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "TFSec detected security vulnerabilities!"
+                  exit 1
+                }
+                Write-Host "TFSec scan completed successfully with 0 issues!"
+              } else {
+                Write-Warning "TFSec not found on agent, skipping..."
+              }
+            displayName: "TFSec Security Scan"
+
+          # Step 2.2: Checkov Policy & Compliance Scan
+          - powershell: |
+              Write-Host "=== Step 2: Running Checkov Policy Scanner ==="
+              if (Get-Command checkov -ErrorAction SilentlyContinue) {
+                cd "$(System.DefaultWorkingDirectory)"
+                checkov -d terraform/ --compact --framework terraform
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Checkov policy scan failed!"
+                  exit 1
+                }
+                Write-Host "Checkov compliance scan passed!"
+              } else {
+                Write-Warning "Checkov not found on agent, skipping..."
+              }
+            displayName: "Checkov Compliance Scan"
+
+
+  # ============================================================================
+  # STAGE 3: TERRAFORM PLAN
+  # ============================================================================
+  # Is stage me remote Azure Blob Storage backend connect hota hai aur
+  # Azure subscription ke against live plan generate hota hai.
+  # Plan ko binary file 'tfplan' ke roop me save karke publish kiya jata hai.
+  # ============================================================================
+  - stage: Terraform_Plan
+    displayName: "Stage 3: Terraform Plan (${{ parameters.environment }})"
+    dependsOn: Security_Scan
+    condition: succeeded()
+    jobs:
+      - job: PlanJob
+        displayName: "Generate Execution Plan"
+        steps:
+          # Step 3.1: Terraform Init with Azure Remote Backend
+          - task: TerraformTask@5
+            displayName: "Terraform Init (Azure Backend)"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: "$(terraformDir)"
+              backendServiceArm: "$(serviceConnection)"
+              backendAzureRmResourceGroupName: "$(backendResourceGroup)"
+              backendAzureRmStorageAccountName: "$(backendStorageAccount)"
+              backendAzureRmContainerName: "$(backendContainer)"
+              backendAzureRmKey: "$(backendKey)"
+
+          # Step 3.2: Terraform Plan Generation
+          # Yeh plan generate karta hai aur usko $(Build.ArtifactStagingDirectory)/tfplan par save karta hai:
+          - task: TerraformTask@5
+            displayName: "Terraform Plan"
+            inputs:
+              provider: "azurerm"
+              command: "plan"
+              workingDirectory: "$(terraformDir)"
+              environmentServiceNameAzureRM: "$(serviceConnection)"
+              commandOptions: "-out=$(Build.ArtifactStagingDirectory)/tfplan -input=false"
+
+          # Step 3.3: Publish Plan Artifact
+          # Yeh plan ko pipeline artifact ke taur par upload karta hai taaki Apply stage isko exactly use kar sake:
+          - task: PublishBuildArtifacts@1
+            displayName: "Publish Terraform Plan Artifact"
+            inputs:
+              PathtoPublish: "$(Build.ArtifactStagingDirectory)/tfplan"
+              ArtifactName: "tfplan-${{ parameters.environment }}"
+              publishLocation: "Container"
+
+
+  # ============================================================================
+  # STAGE 4: TERRAFORM APPLY
+  # ============================================================================
+  # Is stage me Stage 3 ka generated plan exact bina kisi badlav ke apply hota hai.
+  # Condition: Yeh sirf tab chalti hai jab:
+  #   1. action == 'plan-and-apply' ho
+  #   2. Previous stages successful hon
+  #   3. master/main branch se run ho raha ho (PRs me apply nahi hoga)
+  # ============================================================================
+  - stage: Terraform_Apply
+    displayName: "Stage 4: Terraform Apply (${{ parameters.environment }})"
+    dependsOn: Terraform_Plan
+    condition: and(succeeded(), eq('${{ parameters.terraformAction }}', 'plan-and-apply'), in(variables['Build.SourceBranch'], 'refs/heads/master', 'refs/heads/main'))
+    jobs:
+      - job: ApplyJob
+        displayName: "Apply Infrastructure Changes"
+        steps:
+          # Step 4.1: Download Plan Artifact jo Stage 3 me banaya tha
+          - task: DownloadBuildArtifacts@1
+            displayName: "Download Terraform Plan Artifact"
+            inputs:
+              buildType: "current"
+              downloadType: "single"
+              artifactName: "tfplan-${{ parameters.environment }}"
+              downloadPath: "$(System.ArtifactsDirectory)"
+
+          # Step 4.2: Terraform Init with Azure Remote Backend
+          - task: TerraformTask@5
+            displayName: "Terraform Init (Azure Backend)"
+            inputs:
+              provider: "azurerm"
+              command: "init"
+              workingDirectory: "$(terraformDir)"
+              backendServiceArm: "$(serviceConnection)"
+              backendAzureRmResourceGroupName: "$(backendResourceGroup)"
+              backendAzureRmStorageAccountName: "$(backendStorageAccount)"
+              backendAzureRmContainerName: "$(backendContainer)"
+              backendAzureRmKey: "$(backendKey)"
+
+          # Step 4.3: Terraform Apply
+          # Binary tfplan file ko apply kiya ja raha hai taaki exactly wahi create ho jo plan me dikha tha:
+          - task: TerraformTask@5
+            displayName: "Terraform Apply"
+            inputs:
+              provider: "azurerm"
+              command: "apply"
+              workingDirectory: "$(terraformDir)"
+              environmentServiceNameAzureRM: "$(serviceConnection)"
+              commandOptions: "$(System.ArtifactsDirectory)/tfplan-${{ parameters.environment }}/tfplan -input=false"
