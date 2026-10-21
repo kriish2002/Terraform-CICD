@@ -1,4 +1,3 @@
-
 # Aapka local self-hosted Windows agent pool:
 pool:
   name: "Terraform-DevOps-Pool"
@@ -8,7 +7,6 @@ trigger:
   - master
   - main
   - feature/*
-
 
 stages:
 
@@ -23,13 +21,14 @@ stages:
         steps:
 
         - task: TerraformTask@5
+          displayName: "Terraform Init"
           inputs:
             provider: 'azurerm'
             command: 'init'
-            workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/terraform/environments/dev'
             backendServiceArm: 'krish-svc'
             backendAzureRmOverrideSubscriptionID: 'ef91bdd8-1032-48b8-9e99-c38172c04bb6'
             backendAzureRmResourceGroupName: 'krish-test'
             backendAzureRmStorageAccountName: 'krishtfstate42129'
             backendAzureRmContainerName: 'tfstate'
-            backendAzureRmKey: 'dev.terraform.tfsate'
+            backendAzureRmKey: 'dev.terraform.tfstate'
