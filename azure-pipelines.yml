@@ -98,6 +98,10 @@ stages:
               workingDirectory: "$(workingDirectory)"
               environmentServiceNameAzureRM: "$(serviceConnection)"
               environmentAzureRmOverrideSubscriptionID: "$(subscriptionId)"
+              environmentAzureRmUseIdTokenGeneration: true
+            env:
+              ARM_USE_OIDC: "true"
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
 
   # ============================================================================
@@ -157,4 +161,8 @@ stages:
               workingDirectory: "$(workingDirectory)"
               environmentServiceNameAzureRM: "$(serviceConnection)"
               environmentAzureRmOverrideSubscriptionID: "$(subscriptionId)"
+              environmentAzureRmUseIdTokenGeneration: true
               commandOptions: "-auto-approve"
+            env:
+              ARM_USE_OIDC: "true"
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
