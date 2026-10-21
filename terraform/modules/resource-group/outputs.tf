@@ -1,4 +1,4 @@
-﻿output "resource_groups" {
+output "resource_groups" {
   description = "Map of created resource groups"
   value       = azurerm_resource_group.rg
 }

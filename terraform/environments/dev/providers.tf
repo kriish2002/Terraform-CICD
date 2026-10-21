@@ -7,15 +7,16 @@ terraform {
     }
   }
 
-  # Azure Backend configuration for State Management in CI/CD
-  # backend "azurerm" {
-  #   resource_group_name  = "rg-terraform-tfstate"
-  #   storage_account_name = "sttfstatecicd001"
-  #   container_name       = "tfstate"
-  #   key                  = "dev.terraform.tfstate"
-  # }
+  # Azure Backend configuration for State Management
+  backend "azurerm" {
+    resource_group_name  = "krish-test"
+    storage_account_name = "krishtfstate42129"
+    container_name       = "tfstate"
+    key                  = "dev.terraform.tfstate"
+  }
 }
 
 provider "azurerm" {
+  skip_provider_registration = true
   features {}
 }

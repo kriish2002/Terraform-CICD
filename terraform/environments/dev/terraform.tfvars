@@ -4,8 +4,8 @@ resource_groups = {
     name     = "rg-dev-eastus-01"
     location = "East US"
     tags = {
-
-      ManagedBy = "Terraform"
+      Environment = "dev"
+      ManagedBy   = "Terraform"
     }
   }
 }

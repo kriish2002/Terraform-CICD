@@ -1,4 +1,4 @@
-﻿variable "vnets" {
+variable "vnets" {
   description = "Map of Virtual Networks"
   type = map(object({
     name                = string

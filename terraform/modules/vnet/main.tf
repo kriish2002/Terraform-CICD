@@ -1,4 +1,4 @@
-﻿resource "azurerm_virtual_network" "vnet" {
+resource "azurerm_virtual_network" "vnet" {
   for_each = var.vnets
 
   name                = each.value.name
@@ -9,6 +9,7 @@
 }
 
 resource "azurerm_subnet" "subnet" {
+  #checkov:skip=CKV2_AZURE_31:NSG will be associated separately or in a dedicated module
   for_each = var.subnets
 
   name                 = each.value.name
