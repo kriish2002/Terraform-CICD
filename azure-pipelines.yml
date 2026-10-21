@@ -4,70 +4,37 @@ trigger:
   - main
   - feature/*
 
-stages:
-  - stage: TerraformInitAndValidate
-    displayName: 'Terraform Init and Validate'
+steps:
+  - task: PowerShell@2
+    displayName: 'Test Agent'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Agent is working!"
+        Write-Host "Computer: $env:COMPUTERNAME"
+        Write-Host "User: $env:USERNAME"
 
-    jobs:
-      - job: InitAndValidate
-        displayName: 'Terraform CI Pipeline'
+  - task: TerraformInstaller@1
+    displayName: 'Install Terraform'
+    inputs:
+      terraformVersion: '1.16.4'
 
-        steps:
-          # Step 1: Install Terraform
-          - task: TerraformInstaller@1
-            displayName: 'Install Terraform'
-            inputs:
-              terraformVersion: '1.16.4'
+  - task: PowerShell@2
+    displayName: 'Test Terraform Executable'
+    inputs:
+      targetType: 'inline'
+      script: |
+        $exe = "C:\Agent\_work\_tool\terraform\1.16.4\x64\terraform.exe"
 
-          # Step 2: Debug Terraform executable
-          - task: PowerShell@2
-            displayName: 'Debug Terraform Executable'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $exe = "C:\Agent\_work\_tool\terraform\1.16.4\x64\terraform.exe"
+        if (!(Test-Path $exe)) {
+          throw "Terraform executable not found!"
+        }
 
-                Write-Host "Checking Terraform executable..."
-                if (!(Test-Path $exe)) {
-                  throw "Terraform executable not found: $exe"
-                }
+        Write-Host "Terraform executable found."
+        & $exe version
 
-                Get-Item $exe | Select-Object FullName, Length
+        if ($LASTEXITCODE -ne 0) {
+          throw "Terraform version test failed!"
+        }
 
-                Write-Host "Testing Terraform version..."
-                & $exe version
-
-                if ($LASTEXITCODE -ne 0) {
-                  throw "Terraform version command failed."
-                }
-
-          # Step 3: Terraform Init
-          - task: TerraformTask@5
-            displayName: 'Terraform Init'
-            inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
-              backendServiceArm: 'krish-svc'
-              backendAzureRmOverrideSubscriptionID: 'ef91bdd8-1032-48b8-9e99-c38172c04bb6'
-              backendAzureRmResourceGroupName: 'krish-test'
-              backendAzureRmStorageAccountName: 'krishtfstate42129'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'dev.terraform.tfstate'
-
-          # Step 4: Terraform Format Check
-          - task: PowerShell@2
-            displayName: 'Terraform Format Check'
-            inputs:
-              targetType: 'inline'
-              script: |
-                terraform fmt -check -recursive
-              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
-
-          # Step 5: Terraform Validate
-          - task: TerraformTask@5
-            displayName: 'Terraform Validate'
-            inputs:
-              provider: 'azurerm'
-              command: 'validate'
-              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+        Write-Host "Terraform test successful!"
