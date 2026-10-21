@@ -21,7 +21,7 @@ trigger:
 # Reusable variables taaki duplicate values bar-bar na likhni padein:
 variables:
   workingDirectory: "$(System.DefaultWorkingDirectory)/terraform/environments/dev"
-  serviceConnection: "svc-ado"
+  serviceConnection: "krish-svc"
   backendResourceGroup: "krish-test"
   backendStorageAccount: "krishtfstate42129"
   backendContainer: "tfstate"
