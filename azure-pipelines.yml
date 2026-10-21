@@ -5,36 +5,22 @@ trigger:
   - feature/*
 
 steps:
-  - task: PowerShell@2
-    displayName: 'Test Agent'
-    inputs:
-      targetType: 'inline'
-      script: |
-        Write-Host "Agent is working!"
-        Write-Host "Computer: $env:COMPUTERNAME"
-        Write-Host "User: $env:USERNAME"
-
   - task: TerraformInstaller@1
     displayName: 'Install Terraform'
     inputs:
       terraformVersion: '1.16.4'
 
   - task: PowerShell@2
-    displayName: 'Test Terraform Executable'
+    displayName: 'Terraform Init Test'
     inputs:
       targetType: 'inline'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
       script: |
-        $exe = "C:\Agent\_work\_tool\terraform\1.16.4\x64\terraform.exe"
-
-        if (!(Test-Path $exe)) {
-          throw "Terraform executable not found!"
-        }
-
-        Write-Host "Terraform executable found."
-        & $exe version
+        terraform version
+        terraform init -backend=false
 
         if ($LASTEXITCODE -ne 0) {
-          throw "Terraform version test failed!"
+          throw "Terraform init failed!"
         }
 
-        Write-Host "Terraform test successful!"
+        Write-Host "Terraform init test successful!"
